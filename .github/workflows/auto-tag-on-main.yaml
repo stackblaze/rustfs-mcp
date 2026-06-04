@@ -1,0 +1,45 @@
+name: Auto-tag on push to main
+
+# Every merge to main produces an auto-incremented sb.NN tag, which fires
+# docker-release.yaml. Pattern: vX.Y.Z-sb.NN. To bump the base, push that
+# tag manually once; subsequent auto-tags continue from the new base.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+
+jobs:
+  tag:
+    runs-on: [self-hosted, kubero]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.CHAIN_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Compute next sb.N tag
+        id: next
+        run: |
+          set -euo pipefail
+          latest=$(git tag --list 'v*.*.*-sb.*' | sort -V | tail -1 || true)
+          if [ -z "$latest" ]; then
+            echo "::error::No existing v*.*.*-sb.N tag found; push one manually first (e.g. v0.1.0-sb.0)."
+            exit 1
+          fi
+          base="${latest%-sb.*}"
+          n="${latest##*-sb.}"
+          next_n=$((n + 1))
+          next="${base}-sb.${next_n}"
+          echo "Latest: $latest -> next: $next"
+          echo "tag=$next" >> "$GITHUB_OUTPUT"
+
+      - name: Push tag
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git tag '${{ steps.next.outputs.tag }}'
+          git push origin '${{ steps.next.outputs.tag }}'

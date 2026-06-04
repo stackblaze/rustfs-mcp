@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rustfs-mcp
+  namespace: kubero-mcp
+  labels:
+    app.kubernetes.io/name: rustfs-mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rustfs-mcp
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rustfs-mcp
+    spec:
+      containers:
+      - name: rustfs-mcp
+        # Tag patched to the released sb.NN on deploy (kubectl set image).
+        image: ghcr.io/stackblaze/rustfs-mcp:latest
+        imagePullPolicy: IfNotPresent
+        # Long-lived per-type service: ONE instance serves every RustFS (S3)
+        # add-on in this cluster. No endpoint at boot — the kubero broker passes
+        # the target endpoint + creds + access mode per request via
+        # X-Kubero-DB-URI (s3://ak:sk@host:9000) / X-Kubero-Access-Mode
+        # (connection-from-request).
+        args:
+        - --transport
+        - streamable-http
+        - --connection-from-request
+        - --streamable-http-host
+        - 0.0.0.0
+        - --streamable-http-port
+        - "3010"
+        ports:
+        - name: http
+          containerPort: 3010
+        # The MCP /mcp endpoint needs a session handshake, so probe the TCP port
+        # rather than an HTTP path. Liveness == listening.
+        readinessProbe:
+          tcpSocket:
+            port: http
+          periodSeconds: 5
+        livenessProbe:
+          tcpSocket:
+            port: http
+          periodSeconds: 15
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop: ["ALL"]
