@@ -46,10 +46,16 @@ def list_buckets() -> str:
 
 
 @mcp.tool()
-def list_objects(bucket: str, prefix: Optional[str] = None, max_keys: int = 100) -> str:
-    """List objects in a bucket (optionally under a key prefix), newest page first."""
+def list_objects(
+    bucket: str,
+    prefix: Optional[str] = None,
+    max_keys: int = 100,
+    delimiter: Optional[str] = None,
+) -> str:
+    """List objects in a bucket (optionally under a key prefix). Pass delimiter='/'
+    for folder-aware listing (returns `prefixes` = sub-folders + leaf `objects`)."""
     try:
-        return _json(get_manager().list_objects(bucket, prefix, max_keys))
+        return _json(get_manager().list_objects(bucket, prefix, max_keys, delimiter))
     except Exception as e:
         return _err(e)
 
@@ -133,6 +139,47 @@ def set_bucket_policy(bucket: str, policy: str) -> str:
     """Set a bucket policy (JSON string). (Refused on read-only / production add-ons.)"""
     try:
         return _json(get_manager().set_bucket_policy(bucket, policy))
+    except Exception as e:
+        return _err(e)
+
+
+# ---------- Object copy / move / binary (S3 file browser) ----------
+
+@mcp.tool()
+def copy_object(src_bucket: str, src_key: str, dst_bucket: str, dst_key: str) -> str:
+    """Server-side copy an object. (Refused on read-only / production add-ons.)"""
+    try:
+        return _json(get_manager().copy_object(src_bucket, src_key, dst_bucket, dst_key))
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool()
+def move_object(src_bucket: str, src_key: str, dst_bucket: str, dst_key: str) -> str:
+    """Move/rename an object (server-side copy + delete source). (Refused read-only.)"""
+    try:
+        return _json(get_manager().move_object(src_bucket, src_key, dst_bucket, dst_key))
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool()
+def put_object_bytes(
+    bucket: str, key: str, content_b64: str, content_type: Optional[str] = None
+) -> str:
+    """Upload an object from base64 bytes (browser file upload; ~10MiB cap). Empty
+    content + a key ending in '/' creates a folder. (Refused read-only.)"""
+    try:
+        return _json(get_manager().put_object_bytes(bucket, key, content_b64, content_type))
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool()
+def get_object_bytes(bucket: str, key: str, max_bytes: int = 10 * 1024 * 1024) -> str:
+    """Download an object as base64 bytes (browser download; ~10MiB cap)."""
+    try:
+        return _json(get_manager().get_object_bytes(bucket, key, max_bytes))
     except Exception as e:
         return _err(e)
 
