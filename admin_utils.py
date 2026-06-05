@@ -6,8 +6,8 @@ import logging
 import secrets
 from typing import Any, Dict, Optional
 
-from minio import Minio
 from minio import minioadmin
+from minio.credentials import StaticProvider
 from minio.error import MinioAdminException
 
 from s3_connection import get_manager
@@ -27,13 +27,12 @@ def _host_port() -> tuple[str, bool]:
 def _admin() -> minioadmin.MinioAdmin:
     mgr = get_manager()
     host, secure = _host_port()
-    client = Minio(
-        host,
-        access_key=mgr.access_key,
-        secret_key=mgr.secret_key,
+    # minio >=7.2.17: MinioAdmin is keyword-only (endpoint=..., credentials=...).
+    return minioadmin.MinioAdmin(
+        endpoint=host,
+        credentials=StaticProvider(mgr.access_key, mgr.secret_key),
         secure=secure,
     )
-    return minioadmin.MinioAdmin(host, credentials=client._provider, secure=secure)
 
 
 def _ok(payload: Any) -> Dict[str, Any]:
@@ -91,7 +90,6 @@ class RustfsAdmin:
             raw = _admin().add_service_account(
                 access_key=ak,
                 secret_key=sk,
-                target_user=parent,
                 policy=policy_doc,
                 name=name,
                 description=description,
