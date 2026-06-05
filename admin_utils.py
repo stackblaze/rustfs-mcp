@@ -6,10 +6,9 @@ import logging
 import secrets
 from typing import Any, Dict, Optional
 
-from minio import minioadmin
-from minio.credentials import StaticProvider
 from minio.error import MinioAdminException
 
+from rustfs_admin_client import RustfsAdminClient
 from s3_connection import get_manager
 from s3_utils import RestrictedError
 
@@ -24,47 +23,39 @@ def _host_port() -> tuple[str, bool]:
     return host, secure
 
 
-def _admin() -> minioadmin.MinioAdmin:
+def _admin() -> RustfsAdminClient:
     mgr = get_manager()
     host, secure = _host_port()
-    # minio >=7.2.17: MinioAdmin is keyword-only (endpoint=..., credentials=...).
-    return minioadmin.MinioAdmin(
-        endpoint=host,
-        credentials=StaticProvider(mgr.access_key, mgr.secret_key),
-        secure=secure,
-    )
+    return RustfsAdminClient(host, mgr.access_key, mgr.secret_key, secure=secure)
 
 
 def _ok(payload: Any) -> Dict[str, Any]:
     return {"status": "success", **payload} if isinstance(payload, dict) else {"status": "success", "data": payload}
 
 
-def _parse_json_text(text: str) -> Any:
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        return text
-
-
 class RustfsAdmin:
     def list_users(self) -> Dict[str, Any]:
         try:
-            raw = _admin().user_list()
-            return _ok({"users": _parse_json_text(raw)})
+            return _ok({"users": _admin().list_users()})
         except MinioAdminException as e:
             return {"status": "error", "message": str(e)}
 
     def list_access_keys(self, user: Optional[str] = None) -> Dict[str, Any]:
         try:
-            admin = _admin()
             parent = user or get_manager().access_key
-            raw = admin.list_service_account(parent)
-            parsed = _parse_json_text(raw)
+            parsed = _admin().list_service_accounts(parent)
             keys = []
-            if isinstance(parsed, dict):
-                for ak, info in parsed.items():
-                    row = info if isinstance(info, dict) else {"info": info}
-                    keys.append({"access_key": ak, **row})
+            for row in parsed.get("accounts") or []:
+                if not isinstance(row, dict):
+                    continue
+                keys.append(
+                    {
+                        "access_key": row.get("accessKey") or row.get("access_key") or "",
+                        "name": row.get("name"),
+                        "description": row.get("description"),
+                        "status": row.get("accountStatus") or row.get("status"),
+                    }
+                )
             return _ok({"access_keys": keys, "parent_user": parent})
         except MinioAdminException as e:
             return {"status": "error", "message": str(e)}
@@ -86,15 +77,18 @@ class RustfsAdmin:
         policy_doc = None
         if policy:
             policy_doc = json.loads(policy) if isinstance(policy, str) else policy
+        payload: Dict[str, Any] = {
+            "accessKey": ak,
+            "secretKey": sk,
+        }
+        if policy_doc is not None:
+            payload["policy"] = policy_doc
+        if name:
+            payload["name"] = name
+        if description:
+            payload["description"] = description
         try:
-            raw = _admin().add_service_account(
-                access_key=ak,
-                secret_key=sk,
-                policy=policy_doc,
-                name=name,
-                description=description,
-            )
-            parsed = _parse_json_text(raw)
+            parsed = _admin().add_service_account(payload)
             creds = parsed.get("credentials", parsed) if isinstance(parsed, dict) else parsed
             return _ok(
                 {
@@ -119,8 +113,7 @@ class RustfsAdmin:
 
     def list_policies(self) -> Dict[str, Any]:
         try:
-            raw = _admin().policy_list()
-            return _ok({"policies": _parse_json_text(raw)})
+            return _ok({"policies": _admin().list_policies()})
         except MinioAdminException as e:
             return {"status": "error", "message": str(e)}
 
