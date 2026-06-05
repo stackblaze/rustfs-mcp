@@ -231,6 +231,52 @@ class S3Manager:
         self._client.put_bucket_policy(Bucket=bucket, Policy=policy_str)
         return {"status": "success", "message": f"Set bucket policy on '{bucket}'"}
 
+    # ---------- Bucket event notifications (S3 -> kubero event bus) ----------
+
+    def set_bucket_notification(
+        self,
+        bucket: str,
+        events: Optional[List[str]] = None,
+        target_arn: str = "arn:rustfs:sqs::kubero:webhook",
+        notif_id: str = "kubero",
+    ) -> Dict[str, Any]:
+        """Route the bucket's object events to a registered RustFS notification
+        target (the kubero webhook). The target itself is registered out-of-band
+        (the Tenant's spec.env); here we only set the per-bucket rule."""
+        self._require_unrestricted()
+        evs = events or ["s3:ObjectCreated:*"]
+        try:
+            self._client.put_bucket_notification_configuration(
+                Bucket=bucket,
+                NotificationConfiguration={
+                    "QueueConfigurations": [
+                        {"Id": notif_id, "QueueArn": target_arn, "Events": evs}
+                    ]
+                },
+                SkipDestinationValidation=True,
+            )
+            return {
+                "status": "success",
+                "message": f"Bucket '{bucket}' will emit {evs} to {target_arn}",
+            }
+        except ClientError as e:
+            return {"status": "error", "message": f"Failed to set notification: {e}"}
+
+    def get_bucket_notification(self, bucket: str) -> Dict[str, Any]:
+        resp = self._client.get_bucket_notification_configuration(Bucket=bucket)
+        return {
+            "status": "success",
+            "bucket": bucket,
+            "queue_configurations": resp.get("QueueConfigurations", []),
+        }
+
+    def remove_bucket_notification(self, bucket: str) -> Dict[str, Any]:
+        self._require_unrestricted()
+        self._client.put_bucket_notification_configuration(
+            Bucket=bucket, NotificationConfiguration={}, SkipDestinationValidation=True
+        )
+        return {"status": "success", "message": f"Cleared notifications on '{bucket}'"}
+
     def close(self) -> None:
         try:
             self._client.close()

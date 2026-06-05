@@ -137,6 +137,40 @@ def set_bucket_policy(bucket: str, policy: str) -> str:
         return _err(e)
 
 
+# ---------- Bucket event notifications (write) ----------
+
+@mcp.tool()
+def set_bucket_notification(
+    bucket: str,
+    events: Optional[list] = None,
+    target_arn: str = "arn:rustfs:sqs::kubero:webhook",
+) -> str:
+    """Emit this bucket's object events to the kubero event bus. `events` defaults
+    to ['s3:ObjectCreated:*']. (Refused on read-only / production add-ons.)"""
+    try:
+        return _json(get_manager().set_bucket_notification(bucket, events, target_arn))
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool()
+def get_bucket_notification(bucket: str) -> str:
+    """Show the bucket's event-notification rules (which events → which target)."""
+    try:
+        return _json(get_manager().get_bucket_notification(bucket))
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool()
+def remove_bucket_notification(bucket: str) -> str:
+    """Stop emitting this bucket's events. (Refused on read-only / production add-ons.)"""
+    try:
+        return _json(get_manager().remove_bucket_notification(bucket))
+    except Exception as e:
+        return _err(e)
+
+
 # ---------- Prompts ----------
 
 @mcp.prompt()
