@@ -15,9 +15,12 @@ name: Deploy to cluster
 #   2. RELEASE_REGIONS in the plan job
 #   3. KUBECONFIG_B64_<REGION_UPPER> secret in this repo (the workload kubeconfig)
 
+# Manual-only: the workload kubeconfig is NOT wired into CI (we deploy to
+# shared-k8s by hand / via this dispatch), so there is deliberately no
+# `release: published` auto-trigger — pushing a tag only builds the image, it
+# never rolls the cluster. To re-enable auto-deploy, set KUBECONFIG_B64_SHARED
+# and add back `release: { types: [published] }` here.
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       region:
