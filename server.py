@@ -15,6 +15,7 @@ from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
 
+from admin_utils import get_admin
 from s3_connection import get_manager
 from s3_utils import S3_BEST_PRACTICES, RestrictedError
 
@@ -184,7 +185,71 @@ def get_object_bytes(bucket: str, key: str, max_bytes: int = 10 * 1024 * 1024) -
         return _err(e)
 
 
+# ---------- IAM / access keys (admin API) ----------
+
+@mcp.tool()
+def list_users() -> str:
+    """List IAM users in the RustFS tenant."""
+    try:
+        return _json(get_admin().list_users())
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool()
+def list_access_keys(user: Optional[str] = None) -> str:
+    """List service-account access keys for a user (defaults to the root user)."""
+    try:
+        return _json(get_admin().list_access_keys(user))
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool()
+def add_access_key(
+    user: Optional[str] = None,
+    policy: Optional[str] = None,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+    access_key: Optional[str] = None,
+    secret_key: Optional[str] = None,
+) -> str:
+    """Create a scoped access key (service account) for a user. (Refused read-only.)"""
+    try:
+        return _json(
+            get_admin().add_access_key(
+                user=user,
+                policy=policy,
+                name=name,
+                description=description,
+                access_key=access_key,
+                secret_key=secret_key,
+            )
+        )
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool()
+def delete_access_key(access_key: str) -> str:
+    """Delete a service-account access key. (Refused read-only.)"""
+    try:
+        return _json(get_admin().delete_access_key(access_key))
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool()
+def list_policies() -> str:
+    """List canned IAM policies available in RustFS."""
+    try:
+        return _json(get_admin().list_policies())
+    except Exception as e:
+        return _err(e)
+
+
 # ---------- Bucket event notifications (write) ----------
+
 
 @mcp.tool()
 def set_bucket_notification(

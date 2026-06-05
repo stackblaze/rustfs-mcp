@@ -41,6 +41,8 @@ class S3Manager:
 
     def __init__(self, endpoint: str, access_key: str, secret_key: str, restricted: bool = False):
         self.endpoint = endpoint
+        self.access_key = access_key
+        self.secret_key = secret_key
         self.restricted = restricted
         self._client = boto3.client(
             "s3",
